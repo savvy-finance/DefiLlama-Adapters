@@ -33,7 +33,7 @@ function createProvider(name, url, chainId) {
     thundercore: createProvider("thundercore", "https://mainnet-rpc.thundercore.com", 108),
     okexchain: createProvider("okexchain", "https://exchainrpc.okex.org", 66),
     optimism: createProvider("optimism", "https://mainnet.optimism.io/", 10),
-    arbitrum: createProvider("arbitrum", "https://arb1.arbitrum.io/rpc", 42161),
+    arbitrum: createProvider("arbitrum", "https://arbitrum.llamarpc.com", 42161),
     kcc: createProvider("kcc", "https://rpc-mainnet.kcc.network", 321),
     celo: createProvider("celo", "https://forno.celo.org", 42220),
   }

@@ -1,9 +1,13 @@
 const contracts = require("./contracts.json");
 const { sumTokens2 } = require("../helper/unwrapLPs");
 const sdk = require("@defillama/sdk");
+const { getConfig } = require('../helper/cache');
 
 function tvl(chain) {
   return async (timestamp, block, chainBlocks, { api }) => {
+
+    //console.log("api", api);
+
     const savvyPositionManagers = (await sdk.api.abi.call({
       abi: 'function getSavvyPositionManagers() returns (address[] memory)',
       target: contracts.infoAggregator,
@@ -17,6 +21,8 @@ function tvl(chain) {
       })),
       chain: chain
     })).output.map(y => y.output);
+
+    //console.log("ysm", yieldStrategyManagers);
 
     const savvySages = (await sdk.api.abi.multiCall({
       abi: 'address:savvySage',
@@ -81,6 +87,9 @@ function tvl(chain) {
       chain: chain
     })).output.map(y => y.output).flat();
 
+    //console.log("b", baseTokens);
+    //console.log("y", yieldTokens);
+
     const aTokens = (await sdk.api.abi.multiCall({
       abi: 'address:aToken',
       calls: yieldTokens.map((yieldToken) => ({
@@ -99,6 +108,33 @@ function tvl(chain) {
       permitFailure: true
     })).output.filter(y => y.success).map(y => y.output);
 
+    const yyTuples = (await sdk.api.abi.multiCall({
+      abi: 'address:depositToken',
+      calls: yieldTokens.map((yieldToken) => ({
+        target: yieldToken
+      })),
+      chain: chain,
+      permitFailure: true
+    })).output.filter(y => y.success).map(y => [y.input.target, y.output]);
+    const yyValues = (await sdk.api.abi.multiCall({
+      abi: 'uint256:totalDeposits',
+      calls: yyTuples.map((yyTuple) => ({
+        target: yyTuple[0]
+      })),
+      chain: chain,
+      permitFailure: true
+    })).output.map(y => y.output);
+
+    yyTuples.forEach((yyTuple, i) => {
+      api.add(yyTuple[1], yyValues[i]);
+    })
+
+    console.log("yyT", yyTuples);
+    console.log("yyV", yyValues);
+
+    //const tokens = await api.multiCall({ abi: 'address:depositToken', calls: farms.map(i => i.address), permitFailure: true, })
+    //const vals = await api.multiCall({ abi: 'uint256:totalDeposits', calls: farms.map(i => i.address), permitFailure: true, })
+
     //used for wrapped jUDSC & stargate yield tokens
     const underlyingTokens = (await sdk.api.abi.multiCall({
       abi: 'address:token',
@@ -113,9 +149,24 @@ function tvl(chain) {
       .concat(savvySwaps).concat(amos).concat(passThroughAMOs).concat(yieldTokens).filter(h => parseInt(h, 16) !== 0))];
     const tokens = [...new Set(baseTokens.concat(yieldTokens).concat(aTokens).concat(rTokens).concat(underlyingTokens)
       .filter(h => parseInt(h, 16) !== 0))];
+    
+    //await setTvlYieldYak(api);
 
     await sumTokens2({ tokens, api, owners: tokenHolders });
   };
+}
+
+async function setTvlYieldYak(api) {
+  const farms = await getConfig('yieldyak/arbi', 'https://staging-api.yieldyak.com/42161/farms')
+  const tokens = await api.multiCall({ abi: 'address:depositToken', calls: farms.map(i => i.address), permitFailure: true, });
+  const vals = await api.multiCall({ abi: 'uint256:totalDeposits', calls: farms.map(i => i.address), permitFailure: true, });
+  //console.log("farm", farms);
+  //console.log("tokens", tokens);
+  //console.log("vals", vals);
+  tokens.forEach((token, i) => {
+    if (!token || !vals[i]) return;
+    api.add(token, vals[i]);
+  })
 }
 
 module.exports = {

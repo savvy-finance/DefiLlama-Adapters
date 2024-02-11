@@ -1,6 +1,6 @@
 helper/db.js
 node_modules
-.env
+.env*
 run.js
 blocks.js
 historical-data.js
