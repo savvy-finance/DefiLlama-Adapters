@@ -6,19 +6,19 @@ async function tvl(timestamp, block, chainBlocks, { api }) {
     abi: "address[]:getSavvyPositionManagers",
     target: contracts.infoAggregator,
   });
-  // console.log("savvyPositionManagers:", savvyPositionManagers);
+  console.log("savvyPositionManagers:", savvyPositionManagers);
 
   const yieldStrategyManagers = await api.multiCall({
     abi: "address:yieldStrategyManager",
     calls: savvyPositionManagers,
   });
-  // console.log("yieldStrategyManagers:", yieldStrategyManagers);
+  console.log("yieldStrategyManagers:", yieldStrategyManagers);
 
   const savvySages = await api.multiCall({
     abi: "address:savvySage",
     calls: savvyPositionManagers,
   });
-  // console.log("savvySages:", savvySages);
+  console.log("savvySages:", savvySages);
 
   const registeredBaseTokensCalls = (
     await api.multiCall({
@@ -29,19 +29,21 @@ async function tvl(timestamp, block, chainBlocks, { api }) {
     const target = savvySages[i];
     return r.map((params) => ({ target, params }));
   });
-  // console.log("registeredBaseTokensCalls:", registeredBaseTokensCalls);
+  console.log("registeredBaseTokensCalls:", registeredBaseTokensCalls);
 
   const savvySwaps = await api.multiCall({
     abi: "function savvySwap(address baseToken) returns (address)",
     calls: registeredBaseTokensCalls,
   });
-  // console.log("savvySwaps:", savvySwaps);
+  console.log("savvySwaps:", savvySwaps);
 
-  const amos = await api.multiCall({
-    abi: "function amos(address baseToken) returns (address)",
-    calls: registeredBaseTokensCalls,
-  });
-  // console.log("amos:", amos);
+  const amos = (
+    await api.multiCall({
+      abi: "function amos(address baseToken) returns (address)",
+      calls: registeredBaseTokensCalls,
+    })
+  ).filter((y) => y !== nullAddress);
+  console.log("amos:", amos);
 
   const passThroughAMOs = (
     await api.multiCall({
@@ -50,7 +52,7 @@ async function tvl(timestamp, block, chainBlocks, { api }) {
       permitFailure: true,
     })
   ).filter((y) => y);
-  // console.log("passThroughAMOs:", passThroughAMOs);
+  console.log("passThroughAMOs:", passThroughAMOs);
 
   const baseTokens = (
     await api.multiCall({
@@ -58,7 +60,7 @@ async function tvl(timestamp, block, chainBlocks, { api }) {
       calls: yieldStrategyManagers,
     })
   ).map((y) => y);
-  // console.log("baseTokens:", baseTokens);
+  console.log("baseTokens:", baseTokens);
 
   const yieldTokens = (
     await api.multiCall({
@@ -66,84 +68,56 @@ async function tvl(timestamp, block, chainBlocks, { api }) {
       calls: yieldStrategyManagers,
     })
   ).map((y) => y);
-  // console.log("yieldTokens:", yieldTokens);
+  console.log("yieldTokens:", yieldTokens);
 
-  const aTokens = (
-    await api.multiCall({
-      abi: "address:aToken",
-      calls: yieldTokens,
-      permitFailure: true,
-    })
-  ).filter((y) => y);
-  // console.log("aTokens:", aTokens);
+  const tokens = [baseTokens, yieldTokens, contracts.arb].flat(3);
+  console.log("tokens:", tokens);
 
-  const rTokens = (
-    await api.multiCall({
-      abi: "address:rToken",
-      calls: yieldTokens,
-      permitFailure: true,
-    })
-  ).filter((y) => y);
-  // console.log("rTokens:", rTokens);
-
-  const underlyingTokens = (
-    await api.multiCall({
-      abi: "address:token",
-      calls: yieldTokens,
-      permitFailure: true,
-    })
-  ).filter((y) => y);
-  // console.log("underlyingTokens:", underlyingTokens);
-
-  const tokens = [
-    baseTokens,
-    underlyingTokens,
-    yieldTokens,
-    contracts.arb,
-  ].flat(4);
-  // console.log("tokens:", tokens);
-
-  const tokenHolders = [savvyPositionManagers, savvySages, passThroughAMOs]
+  const tokenHolders = [
+    savvyPositionManagers,
+    savvySages,
+    passThroughAMOs,
+    yieldStrategyManagers,
+  ]
     .flat(4)
     .filter((i) => i !== nullAddress);
-  // console.log("tokenHolders:", tokenHolders);
+  console.log("tokenHolders:", tokenHolders);
 
   const tokensAndOwners = tokenHolders
     .map((owner) => tokens.map((token) => [token, owner]))
     .flat();
-  // console.log("tokensAndOwners:", tokensAndOwners);
 
-  const name1 = await api.multiCall({
+  const name = await api.multiCall({
     abi: "string:name",
     calls: tokens,
     permitFailure: true,
   });
-  // console.log("name1:", name1);
+  console.log("name:", name);
 
   const ownYieldTokens = tokens.filter(
-    (_, i) => name1[i] && name1[i].toLowerCase().includes("savvy yield")
+    (_, i) => name[i] && name[i].toLowerCase().includes("savvy yield")
   );
-  // console.log("name1:", name1);
 
   const oyTokens = await api.multiCall({
     abi: "address:aToken",
     calls: ownYieldTokens,
     permitFailure: true,
   });
-  // console.log("name1:", name1);
+  console.log("oyTokens:", oyTokens);
 
   const oybTokens = await api.multiCall({
     abi: "address:baseToken",
     calls: ownYieldTokens,
     permitFailure: true,
   });
-  // console.log("name1:", name1);
+  console.log("oybTokens:", oybTokens);
 
   ownYieldTokens.forEach((_, i) => {
     if (oyTokens[i]) tokensAndOwners.push([oyTokens[i], ownYieldTokens[i]]);
     if (oybTokens[i]) tokensAndOwners.push([oybTokens[i], ownYieldTokens[i]]);
   });
-  // console.log("tokensAndOwners:", tokensAndOwners);
+  console.log("ownYieldTokens:", ownYieldTokens);
+  console.log("tokensAndOwners:", tokensAndOwners);
 
   await sumTokens2({
     tokens,
